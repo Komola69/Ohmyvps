@@ -1,39 +1,33 @@
 name: Kali Linux via Docker - Long Running RustDesk
 
 on:
-  workflow_dispatch: # Manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
     name: Start Long-Running Kali Container...
-    runs-on: ubuntu-latest # We run Docker on top of Ubuntu
-    # Set timeout slightly less than the maximum (usually 360 mins = 6 hours)
-    # to ensure clean shutdown messages if it hits the limit.
+    runs-on: ubuntu-latest
     timeout-minutes: 355
 
     steps:
       - name: Checkout Code (Optional)
         uses: actions/checkout@v4
-        # Add this if you have helper scripts in your repo
 
       - name: Run Kali Container, Install & Start RustDesk, Keep Alive
         run: |
           echo "Starting Kali Linux container..."
-          # Run Kali container interactively (for output), remove automatically on exit
           docker run --rm -i --name kali-rustdesk \
             kalilinux/kali-rolling \
             /bin/bash -c '
             echo "Inside Kali container. Updating apt..."
-            export DEBIAN_FRONTEND=noninteractive # Prevent interactive prompts
+            export DEBIAN_FRONTEND=noninteractive
             apt-get update -y
 
             echo "Installing prerequisites (wget, ca-certificates, libraries)..."
-            # Add any other dependencies RustDesk might need on a bare Kali image
-            # Ensure all graphical dependencies are met if expecting GUI interaction (difficult)
             apt-get install -y wget ca-certificates libgtk-3-0 libxcb-randr0 libxfixes3 libxdamage1 libxcursor1 libxinerama1 libxcomposite1 libxi6 libxtst6 libasound2 libdbus-1-3 libcairo2
 
             echo "Downloading RustDesk..."
-            # !!! VERIFY THIS URL - Go to RustDesk GitHub Releases for the latest AMD64 .deb !!!
+            # !!! You should still verify this URL manually if the script fails !!!
             RUSTDESK_URL=$(curl -s https://api.github.com/repos/rustdesk/rustdesk/releases/latest | grep browser_download_url | grep "amd64.deb" | cut -d '"' -f 4 | head -n 1)
             if [ -z "$RUSTDESK_URL" ]; then
               echo "Failed to automatically find RustDesk URL. Please update the script."
@@ -47,32 +41,18 @@ jobs:
 
             echo "RustDesk installed."
 
-            # --- IMPORTANT: Getting ID/Password ---
             echo "Attempting to retrieve RustDesk connection info..."
-            # Option 1: Set a password (check RustDesk docs for CLI option)
-            # Example (hypothetical): rustdesk --set-password YourSecurePassword123!
-            # Option 2: Try to read ID from config
+            # !!! Configuration for ID/Password is CRITICAL and likely needs specific commands !!!
             echo "Attempting to find ID in config (best effort):"
             grep "id = " ~/.config/RustDesk/RustDesk*.toml || echo "ID not found in default config (RustDesk might need to run once)."
-            # Password retrieval is typically harder - setting one is more reliable if possible.
-            echo "!!! You MUST ensure ID/Password are available/set to connect later !!!"
 
-            # --- Attempt to Start RustDesk in Background ---
             echo "Attempting to start RustDesk service in the background..."
-            # Option A: Start the main application in background (might need display server?)
-            # rustdesk &
-            # Option B: Start the service component (potentially more stable for unattended)
             rustdesk --service &
-
-            # Give it a moment to potentially start/write config
             sleep 10
 
-            # Re-check for ID just in case running it created the config
             echo "Re-checking for ID after attempting start:"
             grep "id = " ~/.config/RustDesk/RustDesk*.toml || echo "ID still not found."
 
-
-            # --- Keep Alive Indefinitely ---
             echo "Setup complete. RustDesk attempted to start in background."
             echo "Container will now sleep indefinitely (or until job timeout/cancellation)."
             echo "Look for RustDesk ID/Password details above."
